@@ -234,54 +234,66 @@ double AInterpolatorVec3::getDeltaTime() const
 {
   return mDt;
 }
-
 void AInterpolatorVec3::interpolate(const std::vector<ASplineVec3::Key>& keys,
-                                    const std::vector<vec3>& ctrlPoints, std::vector<vec3>& curve)
+	const std::vector<vec3>& ctrlPoints, std::vector<vec3>& curve)
 {
-  vec3 val = 0.0;
-  double u = 0.0;
+	vec3 val = 0.0;
+	double u = 0.0;
 
-  curve.clear();
+	curve.clear();
+	//system("cls");
 
-  int numSegments = keys.size() - 1;
-  for (int segment = 0; segment < numSegments; segment++)
-  {
-    for (double t = keys[segment].first; t < keys[segment + 1].first - FLT_EPSILON; t += mDt)
-    {
-      // TODO: Compute u, fraction of duration between segment and segmentnext, for example,
-      // u = 0.0 when t = keys[segment-1].first  
-      // u = 1.0 when t = keys[segment].first
+	int numSegments = keys.size() - 1;
+	for (int segment = 0; segment < numSegments; segment++)
+	{ 
+		//std::cout << "index of segment:" << segment << std::endl;
+		for (double t = keys[segment].first; t < keys[segment + 1].first - FLT_EPSILON; t += mDt) // mDt is the timeStep ?
+		{
+			// TODO: Compute u, fraction of duration between segment and segmentnext, for example,
+			// u = 0.0 when t = keys[segment-1].first  
+			// u = 1.0 when t = keys[segment].first
+			u = (t - keys[segment].first) / (keys[segment + 1].first - keys[segment].first);
 
-      val = interpolateSegment(keys, ctrlPoints, segment, u);
-      curve.push_back(val);
-    }
-  }
-  // add last point
-  if (keys.size() > 1)
-  {
-    u = 1.0;
-    val = interpolateSegment(keys, ctrlPoints, numSegments - 1, u);
-    curve.push_back(val);
-  }
+			val = interpolateSegment(keys, ctrlPoints, segment, u);
+			curve.push_back(val);
+		}
+	}
+	// add last point
+	if (keys.size() > 1)
+	{
+		u = 1.0;
+		val = interpolateSegment(keys, ctrlPoints, numSegments - 1, u);
+		curve.push_back(val);
+	}
 }
 
+// u = [0.0, 1.0];
+vec3 LerpHelper(vec3 iKey0Pos, vec3 iKey1Pos, double u)
+{
+	vec3 temp;
+	for (int i = 0; i < 3; i++)
+	{
+		temp[i] = iKey0Pos[i] * (1 - u) + u * iKey1Pos[i];
+	}
+	return temp;
+}
 
 vec3 ALinearInterpolatorVec3::interpolateSegment(
-  const std::vector<ASplineVec3::Key>& keys,
-  const std::vector<vec3>& ctrlPoints,
-  int segment, double u)
+	const std::vector<ASplineVec3::Key>& keys,
+	const std::vector<vec3>& ctrlPoints,
+	int segment, double u)
 {
-  vec3 curveValue(0, 0, 0);
-  vec3 key0 = keys[segment].second;
-  vec3 key1 = keys[segment + 1].second;
+	vec3 curveValue(0, 0, 0);
+	vec3 key0 = keys[segment].second;
+	vec3 key1 = keys[segment + 1].second;
 
-  // TODO: 
-  //Step 1: Create a Lerp helper function
-  //Step 2: Linear interpolate between key0 and key1 so that u = 0 returns key0 and u = 1 returns key1
+	// TODO: 
+	//Step 1: Create a Lerp helper function
+	//Step 2: Linear interpolate between key0 and key1 so that u = 0 returns key0 and u = 1 returns key1
+	curveValue = LerpHelper(key0, key1, u);
 
-  return curveValue;
+	return curveValue;
 }
-
 vec3 ABernsteinInterpolatorVec3::interpolateSegment(
   const std::vector<ASplineVec3::Key>& keys,
   const std::vector<vec3>& ctrlPoints,
@@ -295,6 +307,23 @@ vec3 ABernsteinInterpolatorVec3::interpolateSegment(
   // TODO: 
   // Step1: Get the 4 control points, b0, b1, b2 and b3 from the ctrlPoints vector
   // Step2: Compute the interpolated value f(u) point using  Bernstein polynomials
+  //system("CLS");
+  //std::cout << "Index of the segment:" << segment << std::endl;
+  // The segment index starts from 0;
+  int j = segment;
+  b0 = ctrlPoints[j * 4];
+  b1 = ctrlPoints[j * 4 + 1];
+  b2 = ctrlPoints[j * 4 + 2];
+  b3 = ctrlPoints[j * 4 + 3];
+
+  double B_0_3, B_1_3, B_2_3, B_3_3;
+
+  B_0_3 = (1 - t) * (1 - t) * (1 - t);
+  B_1_3 = 3 * t * (1 - t) * (1 - t);
+  B_2_3 = 3 * t * t * (1 - t);
+  B_3_3 = t * t * t;
+
+  curveValue = b0 * B_0_3 + b1 * B_1_3 + b2 * B_2_3 + b3 * B_3_3;
 
   return curveValue;
 }
@@ -384,16 +413,41 @@ void ACubicInterpolatorVec3::computeControlPoints(
   ctrlPoints.clear();
   if (keys.size() <= 1) return;
 
+  // 这个 i = 1 有点玄学 ==> 似乎是为了让这个i在含义上能够表示segment标号？ #0 segment, #1 segment, .... #N-1 segment；
+  // 这个循环执行输入点数量少一次也是有点意思 ==> 相当于每一个segment执行一次循环；
   for (int i = 1; i < keys.size(); i++)
   {
     vec3 b0, b1, b2, b3;
 
     // TODO: compute b0, b1, b2, b3
+	
+	int j = i - 1;
+	vec3 s0, s1;
 
-    ctrlPoints.push_back(b0);
-    ctrlPoints.push_back(b1);
-    ctrlPoints.push_back(b2);
-    ctrlPoints.push_back(b3);
+	b0 = keys[j].second;
+	b3 = keys[j + 1].second;
+
+	if ((j - 1) < 0) {
+		s0 = keys[1].second - keys[0].second;
+	}
+	else {
+		s0 = (keys[j + 1].second - keys[j - 1].second) / 2;
+	}
+
+	if ((j + 2) > (keys.size() - 1)) {
+		s1 = keys[j + 1].second - keys[j].second;
+	}
+	else {
+		s1 = (keys[j + 2].second - keys[j].second) / 2;
+	}
+
+	b2 = b3 - s1 / 3;
+	b1 = b0 + s0 / 3;
+	
+	ctrlPoints.push_back(b0);
+	ctrlPoints.push_back(b1);
+	ctrlPoints.push_back(b2);
+	ctrlPoints.push_back(b3);
   }
 }
 
