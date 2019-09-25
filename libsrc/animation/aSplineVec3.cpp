@@ -246,7 +246,6 @@ void AInterpolatorVec3::interpolate(const std::vector<ASplineVec3::Key>& keys,
 	int numSegments = keys.size() - 1;
 	for (int segment = 0; segment < numSegments; segment++)
 	{ 
-		//std::cout << "index of segment:" << segment << std::endl;
 		for (double t = keys[segment].first; t < keys[segment + 1].first - FLT_EPSILON; t += mDt) // mDt is the timeStep ?
 		{
 			// TODO: Compute u, fraction of duration between segment and segmentnext, for example,
@@ -322,7 +321,6 @@ vec3 ABernsteinInterpolatorVec3::interpolateSegment(
   B_1_3 = 3 * t * (1 - t) * (1 - t);
   B_2_3 = 3 * t * t * (1 - t);
   B_3_3 = t * t * t;
-
   curveValue = b0 * B_0_3 + b1 * B_1_3 + b2 * B_2_3 + b3 * B_3_3;
 
   return curveValue;
@@ -343,6 +341,40 @@ vec3 ACasteljauInterpolatorVec3::interpolateSegment(
   // TODO: 
   // Step1: Get the 4 control points, b0, b1, b2 and b3 from the ctrlPoints vector
   // Step2: Compute the interpolated value f(u) point using  deCsteljau alogithm
+  int j = segment;
+  b0 = ctrlPoints[j * 4];
+  b1 = ctrlPoints[j * 4 + 1];
+  b2 = ctrlPoints[j * 4 + 2];
+  b3 = ctrlPoints[j * 4 + 3];
+
+  vec3 b_0_1 = LerpHelper(b0, b1, 0.5);
+  vec3 b_1_1 = LerpHelper(b1, b2, 0.5);
+  vec3 b_2_1 = LerpHelper(b2, b3, 0.5);
+  vec3 b_0_2 = LerpHelper(b_0_1, b_1_1, 0.5);
+  vec3 b_1_2 = LerpHelper(b_1_1, b_2_1, 0.5);
+  vec3 b_0_3 = LerpHelper(b_0_2, b_1_2, 0.5);
+
+  double B_0_3, B_1_3, B_2_3, B_3_3;
+
+  if (t < 0.5)
+  {
+	  double u = t / 0.5;
+	  B_0_3 = (1 - u) * (1 - u) * (1 - u);
+	  B_1_3 = 3 * u * (1 - u) * (1 - u);
+	  B_2_3 = 3 * u * u * (1 - u);
+	  B_3_3 = u * u * u;
+
+	  curveValue = b0 * B_0_3 + b_0_1 * B_1_3 + b_0_2 * B_2_3 + b_0_3 * B_3_3;
+  }
+  else if (t >= 0.5) {
+	  double v = (t - 0.5) / 0.5;
+	  B_0_3 = (1 - v) * (1 - v) * (1 - v);
+	  B_1_3 = 3 * v * (1 - v) * (1 - v);
+	  B_2_3 = 3 * v * v * (1 - v);
+	  B_3_3 = v * v * v;
+
+	  curveValue = b_0_3 * B_0_3 + b_1_2 * B_1_3 + b_2_1 * B_2_3 + b3 * B_3_3;
+  }
 
   return curveValue;
 }
@@ -362,6 +394,33 @@ vec3 AMatrixInterpolatorVec3::interpolateSegment(
   // Step1: Get the 4 control points, b0, b1, b2 and b3 from the ctrlPoints vector
   // Step2: Compute the interpolated value f(u) point using  matrix method f(u) = GMU
   // Hint: Using Eigen::MatrixXd data representations for a matrix operations
+  int j = segment;
+  b0 = ctrlPoints[j * 4];
+  b1 = ctrlPoints[j * 4 + 1];
+  b2 = ctrlPoints[j * 4 + 2];
+  b3 = ctrlPoints[j * 4 + 3];
+
+  Eigen::Matrix<Eigen::Vector3d, -1, 1> gVector(4);
+  Eigen::MatrixXd mMatrix(4, 4);
+  //Eigen::Matrix<Eigen::Vector3d, 1, -1> gVector(4);
+  Eigen::Vector4d uVector(1, t, t * t, t * t * t);
+
+  gVector(0) = Eigen::Vector3d(b0[0], b0[1], b0[2]);
+  gVector(1) = Eigen::Vector3d(b1[0], b1[1], b1[2]);
+  gVector(2) = Eigen::Vector3d(b2[0], b2[1], b2[2]);
+  gVector(3) = Eigen::Vector3d(b3[0], b3[1], b3[2]);
+
+  mMatrix << 1, -3, 3, -1,
+			 0, 3, -6, 3,
+			 0, 0, 3, -3,
+			 0, 0, 0, 1;
+  
+  Eigen::Vector4d temp = mMatrix * uVector;
+  for (int i = 0; i < 4; i++)
+  {
+	  Eigen::Vector3d ele = temp(i) * gVector(i);
+	  curveValue += vec3(ele(0), ele(1), ele(2));
+  }
 
   return curveValue;
 }
@@ -378,7 +437,15 @@ vec3 AHermiteInterpolatorVec3::interpolateSegment(
   vec3 curveValue(0, 0, 0);
 
   // TODO: Compute the interpolated value h(u) using a cubic Hermite polynomial  
+  double t_3 = t * t * t;
+  double t_2 = t * t;
 
+  double b1 = 2 * t_3 - 3 * t_2 + 1;
+  double b2 = -2 * t_3 + 3 * t_2;
+  double b3 = t_3 - 2 * t_2 + t;
+  double b4 = t_3 - t_2;
+
+  curveValue = b1 * p0 + b2 * p1 + b3 * q0 + b4 * q1;
   return curveValue;
 }
 
@@ -461,7 +528,6 @@ void AHermiteInterpolatorVec3::computeControlPoints(
 
   int numKeys = keys.size();
 
-
   // TODO: 
   // For each key point pi, compute the corresonding value of the slope pi_prime.
   // Hints: Using Eigen::MatrixXd for a matrix data structures, 
@@ -474,6 +540,125 @@ void AHermiteInterpolatorVec3::computeControlPoints(
   // Step 2: Initialize D
   // Step 3: Solve AC=D for C
   // Step 4: Save control points in ctrlPoints
+
+  // Note: be careful to the conversion between vec3 and Eigen::Vector3xxxxx.
+  // Node: the default values in Eigen::Matrix / Vector are extreme large negative values rather than 0. Thus, you have to init them.
+  
+  Eigen::Matrix<Eigen::Vector3d, -1, 1> dVector(numKeys);
+  Eigen::MatrixXd aMatrix(numKeys, numKeys);
+
+
+  // Push every elements into the dArray.
+  vec3 temp = 3 * (keys[1].second - keys[0].second);
+  dVector(0)(0) = temp[0];
+  dVector(0)(1) = temp[1];
+  dVector(0)(2) = temp[2];
+  
+  temp = 3 * (keys[numKeys - 1].second - keys[numKeys - 2].second);
+  dVector(numKeys - 1)(0) = temp[0];
+  dVector(numKeys - 1)(1) = temp[1];
+  dVector(numKeys - 1)(2) = temp[2];
+
+  for (int i = 2; i < numKeys; i++)
+  {
+	  temp = 3 * (keys[i].second - keys[i - 2].second);
+	  dVector(i - 1)(0) = temp[0];
+	  dVector(i - 1)(1) = temp[1];
+	  dVector(i - 1)(2) = temp[2];
+  }
+
+  // Push every elements into the aMatrix.
+  // Set the first row.
+  for (int i = 0; i < numKeys; i++)
+  {
+	  if (i == 0)
+	  {
+		  aMatrix(0, 0) = 2;
+	  }
+	  else if (i == 1)
+	  {
+		  aMatrix(0, 1) = 1;
+	  }
+	  else {
+		  aMatrix(0, i) = 0;
+	  }
+  }
+  // Set the last row.
+  for (int i = 0; i < numKeys; i++)
+  {
+	  if (i == (numKeys - 2))
+	  {
+		  aMatrix(numKeys - 1, numKeys - 2) = 1;
+	  }
+	  else if (i == (numKeys - 1)) {
+		  aMatrix(numKeys - 1, numKeys - 1) = 2;
+	  }
+	  else {
+		  aMatrix(numKeys - 1, i) = 0;
+	  }
+  }
+  // Set the rows at the middle.
+  for (int i = 1; i < numKeys - 1; i++)
+  {
+	  for (int j = 0; j < numKeys; j++)
+	  {
+		  if (j != (i - 1) && j != (i) && j != (i + 1))
+		  {
+			  aMatrix(i, j) = 0;
+		  }
+		  else {
+			  aMatrix(i, i - 1) = 1;
+			  aMatrix(i, i) = 4;
+			  aMatrix(i, i + 1) = 1;
+		  }
+	  }
+  }
+  
+  // Compute the C = (A^(-1))D.
+  // Init cVector.
+  Eigen::Matrix<Eigen::Vector3d, -1, 1> cVector(numKeys);
+  Eigen::Vector3d initEigenVec3(0, 0, 0);
+  for (int i = 0; i < numKeys; i++)
+  {
+	  cVector(i) = initEigenVec3;
+  }
+
+  Eigen::MatrixXd aMatrixInverse(numKeys, numKeys);
+  aMatrixInverse = aMatrix.inverse();
+
+  for (int i = 0; i < numKeys; i++)
+  {
+	  Eigen::Vector3d tempCElement;
+	  
+	  // Extract #i row from the inverse aMatrix.
+	  Eigen::VectorXd tempRow(numKeys);
+	  for (int j = 0; j < numKeys; j++)
+	  {
+		  tempRow(j) = aMatrixInverse(i, j);
+	  }
+
+	  // Compute the #i row of the cVector.
+	  // Use #j col of the #i row of the inverse matrix multiplies the #j row of the dVector.
+	  // A.k.a use #j element of the tempRow multiplies the #j row of the dVector.
+	  Eigen::Matrix<Eigen::Vector3d, -1, 1> middleValuesVector(numKeys);
+	  for (int j = 0; j < numKeys; j++)
+	  {
+		  middleValuesVector(j) = tempRow(j) * dVector(j);
+	  }
+	  for (int j = 0; j < numKeys; j++)
+	  {
+		  vec3 check = vec3(middleValuesVector(j)(0), middleValuesVector(j)(1), middleValuesVector(j)(2));
+		  cVector(i) = cVector(i) + middleValuesVector(j);
+	  }
+  }
+  
+  // Push all elements in the cVector into the ctrlPoints vector.
+  
+  for (int i = 0; i < numKeys; i++)
+  {
+	  vec3 check = vec3(vec3(cVector(i)(0), cVector(i)(1), cVector(i)(2)));
+	  ctrlPoints.push_back(check);
+  }
 }
 
 
