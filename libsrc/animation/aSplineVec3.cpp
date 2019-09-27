@@ -623,7 +623,7 @@ vec3 ABSplineInterpolatorVec3::interpolateSegment(
 	  int coeff = 1 + i;
 	  knotVec.push_back(keys[keys.size() - 1].first + coeff * tInterval);
   }
-
+  /*
   int j = 0;
   for (;; j++)
   {
@@ -631,28 +631,24 @@ vec3 ABSplineInterpolatorVec3::interpolateSegment(
 	  {
 		  break;
 	  }
-  }
+  }*/
 
   // Step 2: compute the n nonzero Bspline Basis functions N given j
   // Step 3: get the corresponding control points from the ctrlPoints vector
   // Step 4: compute the Bspline curveValue at time t
-  
-  for (int k = 0; k < 4; k++)
+  double totalTValue = segment + t;
+  for (int j = 0; j < keys.size() + 2; j++)
   {
-	  //std::cout << "t:" << t << std::endl;
-	  //std::cout << "j:" << j << std::endl;
-	  //std::cout << "j - k:" << j - k << std::endl;
-	  //double currentN = Nj_n2(knotVec, j - k, 3, 1);
-	  //double currentN = Nj_n2(knotVec, 4, 3, 1.0);
-	  double currentN = Nj_n2(knotVec, j - k, 3, t);
-	  //std::cout << "t:" << t << std::endl;
-	  //std::cout << "j:" << j << std::endl;
-	  //std::cout << "j - k:" << j - k << std::endl;
-	  /*vec3 currentCtrPoint = ctrlPoints[j - k];
-	  curveValue[0] += currentCtrPoint[0] * currentN;
-	  curveValue[1] += currentCtrPoint[1] * currentN;
-	  curveValue[2] += currentCtrPoint[2] * currentN;*/
+	  double currentN = Nj_n(knotVec, j, 3, totalTValue);
+	  vec3 currentCtrPoint = ctrlPoints[j];
+	  //std::cout << "current t:" << t << std::endl;
+	  curveValue += currentN * currentCtrPoint;
+	  //std::cout << "current curve value" << curveValue << std::endl;
+	  //std::cout << std::endl;
   }
+  std::cout << "current t:" << t << std::endl;
+  std::cout << "current segment:" << segment << std::endl;
+  std::cout << std::endl;
   
   return curveValue;
 }
