@@ -450,6 +450,144 @@ vec3 AHermiteInterpolatorVec3::interpolateSegment(
 }
 
 
+
+
+// Used to calculate the value of Nj_n, which also is a recurisive function.
+double Nj_n(std::vector<double> knotVec, int j, int n, double t)
+{
+	// Find almbda j and almbda j+1.
+	double almbda_j = knotVec[j];
+	double almbda_jadd1 = knotVec[j + 1];
+	double almbda_jaddnadd1 = knotVec[j + n + 1];
+	double almbda_jaddn = knotVec[j + n];
+
+	// Return 0.0, if the ti is not located at the range of [almbda_j, almbda_j+n+1].
+	// Check whether the input t is a ti.
+	bool isTi = false;
+	for (int i = 0; i < knotVec.size(); i++)
+	{
+		double dis = t - knotVec[i];
+		if (abs(dis) < DBL_EPSILON)
+		{
+			isTi = true;
+			break;
+		}
+	}
+
+	if (isTi)
+	{
+		if ((t < almbda_j || t > almbda_jaddnadd1))
+		{
+			return 0.0;
+		}
+	}
+
+	// Return 0.0 or 1.0 when n = 0.
+	if (n == 0)
+	{
+		if (t < almbda_jadd1 && t >= almbda_j)
+		{
+			return 1.0;
+		}
+		else
+		{
+			return 0.0;
+		}
+	}
+
+	double currentNj_n = (t - almbda_j) * Nj_n(knotVec, j, n - 1, t) / (almbda_jaddn - almbda_j) + (almbda_jaddnadd1 - t) * Nj_n(knotVec, j + 1, n - 1, t) / (almbda_jaddnadd1 - almbda_jadd1);
+
+	return currentNj_n;
+}
+
+double Nj_n2(std::vector<double> knotVec, int j, int n, double t)
+{
+	// Check whether the input t is a ti.
+	bool isTi = false;
+	for (int i = 0; i < knotVec.size(); i++)
+	{
+		double dis = t - knotVec[i];
+		if (abs(dis) < DBL_EPSILON)
+		{
+			isTi = true;
+			break;
+		}
+	}
+
+	if ((j + n + 1) >= knotVec.size())
+	{
+		return 0.0;
+	}
+
+	// Find almbda j and almbda j+1.
+	double almbda_j = knotVec[j];
+	double almbda_jadd1 = knotVec[j + 1];
+	double almbda_jaddnadd1 = knotVec[j + n + 1];
+	double almbda_jaddn = knotVec[j + n];
+
+	// Return 0.0, if the ti is not located at the range of [almbda_j, almbda_j+n+1].
+	
+
+	if (isTi)
+	{
+		if ((t < almbda_j || t > almbda_jaddnadd1))
+		{
+			return 0.0;
+		}
+	}
+
+	// Return 0.0 or 1.0 when n = 0.
+	if (n == 0)
+	{
+		if (t < almbda_jadd1 && t >= almbda_j)
+		{
+			return 1.0;
+		}
+		else
+		{
+			return 0.0;
+		}
+	}
+
+	double currentNj_n = (t - almbda_j) * Nj_n(knotVec, j, n - 1, t) / (almbda_jaddn - almbda_j) + (almbda_jaddnadd1 - t) * Nj_n(knotVec, j + 1, n - 1, t) / (almbda_jaddnadd1 - almbda_jadd1);
+
+	return currentNj_n;
+}
+
+// Used to calculate the derivative of N.
+double dN(std::vector<double> knotVec, int j, int n, double t, int l)
+{
+	if (l == 0)
+	{
+		double check = Nj_n(knotVec, j, n, t);
+		return check;
+	}
+	double almbda_j = knotVec[j];
+	double almbda_jadd1 = knotVec[j + 1];
+	double almbda_jaddnadd1 = knotVec[j + n + 1];
+	double almbda_jaddn = knotVec[j + n];
+
+	// Return 0.0 or 1.0 when n = 0.
+	if (n == 0)
+	{
+		if (t < almbda_jadd1 && t >= almbda_j)
+		{
+			return 1.0;
+		}
+		else
+		{
+			return 0.0;
+		}
+	}
+
+	double Ele1 = dN(knotVec, j, n - 1, t, l - 1) / (almbda_jaddn - almbda_j);
+	double Ele2 = dN(knotVec, j + 1, n - 1, t, l - 1) / (almbda_jaddnadd1 - almbda_jadd1);
+
+	double current_dN = n * (Ele1 - Ele2);
+	return current_dN;
+}
+
+
 vec3 ABSplineInterpolatorVec3::interpolateSegment(
   const std::vector<ASplineVec3::Key>& keys,
   const std::vector<vec3>& ctrlPoints,
@@ -464,11 +602,58 @@ vec3 ABSplineInterpolatorVec3::interpolateSegment(
   //     t = time value	
 
   // Step 1: determine the index j
+  // Construct Knot Vector;
+  std::vector<double> knotVec;
+  double tInterval = keys[1].first - keys[0].first; // It should be 1.0;
+  int degree = 3;
+  for (int i = 0; i < degree; i++)
+  {
+	  int coeff = i - degree;
+	  knotVec.push_back(keys[0].first + coeff * tInterval);
+  }
+
+  double knotVecEle = 0.0;
+  for (int i = 0; i < keys.size(); i++, knotVecEle += 1.0)
+  {
+	  knotVec.push_back(knotVecEle);
+  }
+
+  for (int i = 0; i < degree; i++)
+  {
+	  int coeff = 1 + i;
+	  knotVec.push_back(keys[keys.size() - 1].first + coeff * tInterval);
+  }
+
+  int j = 0;
+  for (;; j++)
+  {
+	  if (t >= knotVec[j] && t < knotVec[j + 1])
+	  {
+		  break;
+	  }
+  }
+
   // Step 2: compute the n nonzero Bspline Basis functions N given j
   // Step 3: get the corresponding control points from the ctrlPoints vector
   // Step 4: compute the Bspline curveValue at time t
-
-
+  
+  for (int k = 0; k < 4; k++)
+  {
+	  //std::cout << "t:" << t << std::endl;
+	  //std::cout << "j:" << j << std::endl;
+	  //std::cout << "j - k:" << j - k << std::endl;
+	  //double currentN = Nj_n2(knotVec, j - k, 3, 1);
+	  //double currentN = Nj_n2(knotVec, 4, 3, 1.0);
+	  double currentN = Nj_n2(knotVec, j - k, 3, t);
+	  //std::cout << "t:" << t << std::endl;
+	  //std::cout << "j:" << j << std::endl;
+	  //std::cout << "j - k:" << j - k << std::endl;
+	  /*vec3 currentCtrPoint = ctrlPoints[j - k];
+	  curveValue[0] += currentCtrPoint[0] * currentN;
+	  curveValue[1] += currentCtrPoint[1] * currentN;
+	  curveValue[2] += currentCtrPoint[2] * currentN;*/
+  }
+  
   return curveValue;
 }
 
@@ -661,7 +846,7 @@ void AHermiteInterpolatorVec3::computeControlPoints(
   }
 }
 
-
+// Used to calculate the basis spline N
 void ABSplineInterpolatorVec3::computeControlPoints(
   const std::vector<ASplineVec3::Key>& keys,
   std::vector<vec3>& ctrlPoints,
@@ -684,12 +869,139 @@ void ABSplineInterpolatorVec3::computeControlPoints(
   // Step 1: Calculate knot vector using a uniform BSpline
   //         (assume knots are evenly spaced 1 apart and the start knot is at time = 0.0)
 
+  // 1.1: Construct the knotVec, and lambdaVec.
+
+  std::vector<double> knotVec;
+  double tInterval = keys[1].first - keys[0].first; // It should be 1.0;
+  int degree = 3;
+  for (int i = 0; i < degree; i++)
+  {
+	  int coeff = i - degree;
+	  knotVec.push_back(keys[0].first + coeff * tInterval);
+  }
+
+  double knotVecEle = 0.0;
+  for (int i = 0; i < keys.size(); i++, knotVecEle += 1.0)
+  {
+	  knotVec.push_back(knotVecEle);
+  }
+
+  for (int i = 0; i < degree; i++)
+  {
+	  int coeff = 1 + i;
+	  knotVec.push_back(keys[keys.size() - 1].first + coeff * tInterval);
+  }
+  /**/
+  //std::cout << knotVec[0] << std::endl;
+
   // Step 2: Calculate A matrix  for a natural BSpline
   //         (Set 2nd derivative at t0 and tm to zero, where tm is the last point knot; m = #segments)
+  
+  Eigen::MatrixXd aMatrix(keys.size() + 2, keys.size() + 2);
+  // Init the Matrix.
+  for (int i = 0; i < keys.size() + 2; i++)
+  {
+	  for (int j = 0; j < keys.size() + 2; j++)
+	  {
+		  aMatrix(i, j) = 0.0;
+	  }
+  }
+  
+  // Set the value
+  // i is the row index, j is the column index.
+  for (int i = 0; i < keys.size() + 2; i++)
+  {
+	  if (i == 0)
+	  {
+		  // The first row.
+		  for (int j = 0; j < 4; j++)
+		  {
+			  aMatrix(i, j) = dN(knotVec, j, 3, keys[0].first, 2);
+		  }
+	  }
+	  else if(i == keys.size() + 1)
+	  {
+		  // The last row.
+		  for (int j = keys.size() - 2; j < keys.size() + 2; j++)
+		  {
+			  aMatrix(i, j) = dN(knotVec, j, 3, keys[keys.size() - 1].first, 2);
+		  }
+	  }
+	  else {
+		  // The rows at the middle.
+		  for (int j = 0; j < keys.size() + 2; j++)
+		  {
+			  aMatrix(i, j) = Nj_n(knotVec, j, 3, keys[i - 1].first);
+		  }
+	  }
+  }/**/
+  //double check = Nj_n(knotVec, 0, 3, keys[0].first);
+  //std::cout << check << std::endl;
+  // double dN(std::vector<double> knotVec,int j, int n,double t,int l)
+  //double check = dN(knotVec, 2, 3, keys[0].first, 2);
+  //std::cout << check << std::endl;
 
   // Step 3: Calculate  D matrix composed of our target points to interpolate
+  // Init the D vector.
+  
+  Eigen::Matrix<Eigen::Vector3d, -1, 1> dVector(keys.size() + 2);
+  Eigen::Vector3d initEigenVec3(0, 0, 0);
+  for (int i = 0; i < keys.size() + 2; i++)
+  {
+	  dVector(i) = initEigenVec3;
+  }
 
+  // Put key points into it.
+  for (int i = 1; i < keys.size() + 1; i++)
+  {
+	  dVector(i) = Eigen::Vector3d(keys[i - 1].second[0], keys[i - 1].second[1], keys[i - 1].second[2]);
+  }
+  /**/
   // Step 4: Solve AC=D for C 
+  // Get the A inverse.
+  
+  Eigen::MatrixXd aMatrixInverse(keys.size() + 2, keys.size() + 2);
+  aMatrixInverse = aMatrix.inverse();
+  /**/
+  // Compute the C = A^(-1)D.
+  
+  Eigen::Matrix<Eigen::Vector3d, -1, 1> cVector(keys.size() + 2);
+  for (int i = 0; i < keys.size() + 2; i++)
+  {
+	  cVector(i) = initEigenVec3;
+  }
+
+  for (int i = 0; i < keys.size() + 2; i++)
+  {
+	  Eigen::Vector3d tempDElement;
+
+	  // Extract #i row from the inverse aMatrix.
+	  Eigen::VectorXd tempRow(keys.size() + 2);
+	  for (int j = 0; j < keys.size() + 2; j++)
+	  {
+		  tempRow(j) = aMatrixInverse(i, j);
+	  }
+
+	  // Compute the #i row of the cVector.
+	  // Use #j col of the #i row of the inverse matrix multiplies the #j row of the dVector.
+	  // A.k.a use #j element of the tempRow multiplies the #j row of the dVector.
+	  Eigen::Matrix<Eigen::Vector3d, -1, 1> middleValuesVector(keys.size() + 2);
+	  for (int j = 0; j < keys.size() + 2; j++)
+	  {
+		  middleValuesVector(j) = tempRow(j) * dVector(j);
+	  }
+	  for (int j = 0; j < keys.size() + 2; j++)
+	  {
+		  vec3 check = vec3(middleValuesVector(j)(0), middleValuesVector(j)(1), middleValuesVector(j)(2));
+		  cVector(i) = cVector(i) + middleValuesVector(j);
+	  }
+  }
+  /**/
 
   // Step 5: save control points in ctrlPoints
+  for (int i = 0; i < keys.size() + 2; i++)
+  {
+	  vec3 check = vec3(vec3(cVector(i)(0), cVector(i)(1), cVector(i)(2)));
+	  ctrlPoints.push_back(check);
+  }/**/
 }
